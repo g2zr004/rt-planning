@@ -4,11 +4,13 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using Unity.MLAgents;
 using Unity.MLAgents.Policies;
+using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 
 public class Laser : Agent
 {
    public Rigidbody3D laser_head;
+   public Rigidbody3D laser_end;
    public int number_of_targets;
    public GameObject[] targets = new GameObject[number_of_targets];
    public GameObject[] terrain;
@@ -19,12 +21,14 @@ public class Laser : Agent
    public float current_rewards = 0f;
    public bool useVecObs;
    public float Speed = 3.0f;
+   public float rot_Speed = 5.0f;
 
    public float laserWidth = 1.0f;
    public float noise = 1.0f;
    public float laserLength = 50.0f;
    public Color color = Color.green;
    Vecrtor3 Offset = new Vector3.zero;
+   Angle rot_angle = new Angle(0, Angle.Type.Degrees);
 
    EnvironmentParameters m_ResetParams;
    Unity.MLAgents.Policies.BehaviorType BehaviorType;
@@ -32,6 +36,10 @@ public class Laser : Agent
    void Start ()
    {
     lr = GetComponent<LineRenderer>();
+    lineRenderer.SetColors(color);
+    laser_head.transform.position = new Vector3.zero;
+    laser_end.transform.position = new Vector3(0, 0, -laserLength);
+
     isInference = GetComponent<BehaviorParameters>().BehaviorType == BehaviorType.InferenceOnly;
 
     Debug.Log("IsInference = " + IsInference);
@@ -80,13 +88,26 @@ public class Laser : Agent
 		if (isInference)
       {
 			MoveAgent(actionBuffers.ContinuousActions);
-			StartCoroutine(Release());
+			StartCoroutine();
 		}
 	}
 
+   public override void StartCoroutine ()
+   {
+      
+   }
+
    void Update ()
    {
-      lr.SetPosition(laser_head.position, )
+      lr.SetPosition(laser_head.transform.position, laser_end.transform.position);
+      lineRenderer.SetWidth(laserWidth, laserWidth);
+
+      if (!isInference && isPressed)
+      {
+				RequestDecision();
+				if (isPreviousActionSet){MoveAgent(previousAction);}
+		}
+
    }
 
    void Move (Vector3 movementVector)
@@ -107,14 +128,25 @@ public class Laser : Agent
 
    void Rotate ()
    {
-      if (Input.GetKey(KeyCode.RightArrow))
+      if (Input.GetKey(KeyCode.A))
       {
-           transform.Rotate(new Vector3(0, 1, 0) * Time.deltaTime * Speed, Space.World);
+         rot_angle = -rot_Speed * Time.deltaTime;
+      }
+      if (Input.GetKey(KeyCode.D))
+      {
+         rot_angle = rot_Speed * Time.deltaTime;
       }
 
-      if (Input.GetKey(KeyCode.LeftArrow))
+      laser_end.transform.Translate(horizontal_distance, vertical_distance);
+      if (rot_angle < new Angle(0, Angle.Type.Degrees))
       {
-          transform.Rotate(new Vector3(0, -1, 0) * Time.deltaTime * Speed, Space.World);
+         horizontal_distance = -Math.Sin(rot_angle) * laserLength;
+         vertical_distance = = -Math.Cos(rot_angle) * laserLength;
+      }
+      if (rot_angle >= new Angle(0, Angle.Type.Degrees))
+      {
+         horizontal_distance = Math.Sin(rot_angle) * laserLength;
+         vertical_distance = = -Math.Cos(rot_angle) * laserLength;
       }
    }
  
@@ -143,7 +175,7 @@ public class Laser : Agent
 
    void RewardAgent ()
    {
-		Debug.Log("reward func:: n Enemies = " + m_numberofEnemies + " n Enemies Alive = " + Enemy.EnemiesAlive);
+		Debug.Log("Time used to elimate the block: " + );
 		m_currentReward = ((float)m_numberofEnemies - (float)Enemy.EnemiesAlive)/(float)m_numberofEnemies; 
 		Debug.Log("Set reward = " + m_currentReward);
 		SetReward(m_currentReward); 
@@ -152,13 +184,12 @@ public class Laser : Agent
    public void SetResetParameters ()
    {
 		m_currentReward = 0;
-		m_throwsRemaining = m_numberofThrows; 
-		ResetBall();
+		ResetTarget();
 		SetReward(0);
 
-		foreach (GameObject enemyGO in m_cachedEnemiesGO)
+		foreach (GameObject target in targets)
       {
-			if (!enemyGO.activeInHierarchy)
+			if (!targets.activeInHierarchy)
          {
 				Debug.Log("RESPAWN = " + enemyGO.name);
 				enemyGO.GetComponent<Enemy>().Respawn();
